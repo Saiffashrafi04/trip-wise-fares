@@ -5,7 +5,7 @@ import { Navigation } from "@/components/Navigation";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, Heart, Star } from "lucide-react";
+import { ArrowLeft, Heart, Star, Check } from "lucide-react";
 import { calculateDistance } from "@/data/mumbaiStations";
 import { calculateFares, FareOption } from "@/lib/fareCalculator";
 import { supabase } from "@/lib/supabaseClient";
@@ -17,6 +17,7 @@ const Comparison = () => {
   const [fares, setFares] = useState<FareOption[]>([]);
   const [distance, setDistance] = useState(0);
   const [isSaved, setIsSaved] = useState(false);
+  const [selectedRide, setSelectedRide] = useState<FareOption | null>(null);
   const navigate = useNavigate();
   const { toast } = useToast();
 
@@ -36,24 +37,39 @@ const Comparison = () => {
       setDistance(dist);
       const calculatedFares = calculateFares(dist);
       setFares(calculatedFares);
-
-      // Save to history
-      const bestFare = calculatedFares[0];
-      if (bestFare) {
-        await supabase.from('ride_history').insert({
-          user_id: session.user.id,
-          pickup_location: pickup,
-          drop_location: drop,
-          distance: dist,
-          best_fare: bestFare.price,
-          best_provider: `${bestFare.company} ${bestFare.vehicleType}`,
-          comparison_data: calculatedFares,
-        });
-      }
     };
     
     checkAuth();
   }, [pickup, drop, navigate]);
+
+  const handleSelectRide = async (fare: FareOption) => {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) return;
+
+    const { error } = await supabase.from('ride_history').insert({
+      user_id: session.user.id,
+      pickup_location: pickup,
+      drop_location: drop,
+      distance,
+      best_fare: fare.price,
+      best_provider: `${fare.company} ${fare.vehicleType}`,
+      comparison_data: fares,
+    });
+
+    if (error) {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    } else {
+      setSelectedRide(fare);
+      toast({
+        title: "Ride selected!",
+        description: `${fare.company} ${fare.vehicleType} - ₹${fare.price} saved to history`,
+      });
+    }
+  };
 
   const handleSaveRoute = async () => {
     const { data: { session } } = await supabase.auth.getSession();
@@ -130,35 +146,58 @@ const Comparison = () => {
                     <th className="text-left p-4 font-semibold">Price (₹)</th>
                     <th className="text-left p-4 font-semibold">ETA</th>
                     <th className="text-left p-4 font-semibold">Rating</th>
+                    <th className="text-left p-4 font-semibold">Action</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {fares.map((fare, index) => (
-                    <tr 
-                      key={index}
-                      className="border-b hover:bg-secondary/50 transition-colors"
-                    >
-                      <td className="p-4 font-medium">{fare.company}</td>
-                      <td className="p-4 text-muted-foreground">{fare.vehicleType}</td>
-                      <td className="p-4">
-                        <div className="flex items-center gap-2">
-                          <span className="font-semibold text-lg">₹{fare.price}</span>
-                          {index === 0 && (
-                            <Badge className="bg-accent text-accent-foreground">
-                              Best Price
-                            </Badge>
-                          )}
-                        </div>
-                      </td>
-                      <td className="p-4 text-muted-foreground">{fare.eta} min</td>
-                      <td className="p-4">
-                        <div className="flex items-center gap-1">
-                          <Star className="h-4 w-4 fill-yellow-400 text-yellow-400" />
-                          <span>{fare.rating}</span>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
+                  {fares.map((fare, index) => {
+                    const isSelected = selectedRide?.company === fare.company && 
+                                      selectedRide?.vehicleType === fare.vehicleType;
+                    return (
+                      <tr 
+                        key={index}
+                        className={`border-b hover:bg-secondary/50 transition-colors ${isSelected ? 'bg-accent/10' : ''}`}
+                      >
+                        <td className="p-4 font-medium">{fare.company}</td>
+                        <td className="p-4 text-muted-foreground">{fare.vehicleType}</td>
+                        <td className="p-4">
+                          <div className="flex items-center gap-2">
+                            <span className="font-semibold text-lg">₹{fare.price}</span>
+                            {index === 0 && (
+                              <Badge className="bg-accent text-accent-foreground">
+                                Best Price
+                              </Badge>
+                            )}
+                          </div>
+                        </td>
+                        <td className="p-4 text-muted-foreground">{fare.eta} min</td>
+                        <td className="p-4">
+                          <div className="flex items-center gap-1">
+                            <Star className="h-4 w-4 fill-yellow-400 text-yellow-400" />
+                            <span>{fare.rating}</span>
+                          </div>
+                        </td>
+                        <td className="p-4">
+                          <Button 
+                            size="sm"
+                            onClick={() => handleSelectRide(fare)}
+                            disabled={isSelected}
+                            variant={isSelected ? "secondary" : "default"}
+                            className="gap-2"
+                          >
+                            {isSelected ? (
+                              <>
+                                <Check className="h-4 w-4" />
+                                Selected
+                              </>
+                            ) : (
+                              'Select'
+                            )}
+                          </Button>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
