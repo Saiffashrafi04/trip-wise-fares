@@ -4,7 +4,7 @@ import { Header } from "@/components/Header";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { supabase } from "@/lib/supabaseClient";
+import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { Trash2, Users, Star, History as HistoryIcon } from "lucide-react";
 
@@ -35,6 +35,8 @@ const Admin = () => {
   const [users, setUsers] = useState<User[]>([]);
   const [favorites, setFavorites] = useState<FavoriteRoute[]>([]);
   const [history, setHistory] = useState<RideHistory[]>([]);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
   const { toast } = useToast();
 
@@ -43,6 +45,31 @@ const Admin = () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
         navigate("/auth");
+        return;
+      }
+
+      // Check admin status via edge function
+      try {
+        const { data, error } = await supabase.functions.invoke('check-admin');
+        
+        if (error || !data?.isAdmin) {
+          toast({
+            title: "Access Denied",
+            description: "You don't have admin privileges",
+            variant: "destructive",
+          });
+          navigate("/");
+          return;
+        }
+        
+        setIsAdmin(true);
+      } catch (error) {
+        toast({
+          title: "Error",
+          description: "Failed to verify admin access",
+          variant: "destructive",
+        });
+        navigate("/");
         return;
       }
 
@@ -64,10 +91,12 @@ const Admin = () => {
         .select('*')
         .order('created_at', { ascending: false });
       setHistory(historyData || []);
+      
+      setLoading(false);
     };
 
     fetchData();
-  }, [navigate]);
+  }, [navigate, toast]);
 
   const handleDeleteFavorite = async (id: string) => {
     const { error } = await supabase
@@ -110,6 +139,18 @@ const Admin = () => {
       });
     }
   };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <p className="text-muted-foreground">Verifying admin access...</p>
+      </div>
+    );
+  }
+
+  if (!isAdmin) {
+    return null;
+  }
 
   return (
     <div className="min-h-screen bg-background">
