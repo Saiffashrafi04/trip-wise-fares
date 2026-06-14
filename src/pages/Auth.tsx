@@ -166,7 +166,7 @@ const Auth = () => {
         )}
 
         <div className="mt-8 text-center text-sm text-muted-foreground">
-          <p>Created with ❤️ by Mohammed Saif</p>
+          <p>Created with ❤️ by Mateen, Mohammed &amp; Saif</p>
         </div>
       </Card>
     </div>
